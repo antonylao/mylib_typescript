@@ -1,4 +1,4 @@
-import { enableMapSet, produce } from "immer";
+import { current, Draft, enableMapSet, produce, setAutoFreeze } from "immer";
 //-----------------------------------------
 // FUNCTIONAL PARADIGM FUNCTIONS
 //-------------------------------------------
@@ -176,8 +176,9 @@ export function withArraySwap(Or_MapSetObj: Map<any, any> | Set<any>, f: Functio
  * @returns the copy-on-write object
  * @last update: 19/07/2024; verified: 19/07/2024; tested: NO (I trust the Immer library)
  */
-export function copyOnWrite(obj: any, changeFn: Function) {
-  //import { current, enableMapSet, produce } from "immer";
+// rewrote function signature to have the correct return types https://github.com/immerjs/immer/issues/787 
+export function copyOnWrite<T>(obj: T, changeFn: (draft: Draft<T>) => Draft<T> | void) {
+  //import { current, enableMapSet, produce } from "immer"
   enableMapSet()
   return produce(obj, changeFn);
 }
