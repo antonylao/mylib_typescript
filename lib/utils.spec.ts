@@ -102,6 +102,18 @@ describe("builtin data structure function tests", () => {
       expect(Object.fromEntries(countBy_withSet)).toMatchObject(Object.fromEntries(expectedWithSet))
       expect(Object.fromEntries(countBy_withArr)).toMatchObject(Object.fromEntries(expectedWithArr))
     })
+
+    it("implementation: works with values in returned Map being falsy values", () => {
+      //* not possible because the values of the returned map start with 1, then incremented => values are always truthy
+      //setup
+      const myMap = new Map()
+      myMap.set("a", "val")
+      //apply
+      const countBy_result = countBy(myMap, (v, k) => { return "key" })
+      const expected = new Map([["key", 1]])
+      //test
+      expect(Object.fromEntries(countBy_result)).toMatchObject(Object.fromEntries(expected))
+    })
   })
 
   describe("groupBy()", () => {
@@ -114,14 +126,14 @@ describe("builtin data structure function tests", () => {
       //apply
       const groupBy_withMap = groupBy(myMap, (v, k) => { return v % 2 === 0 })
       const expectedWithMap = new Map([
-        ["false", new Map([["a", 1], ["d", 3]])],
-        ["true", new Map([["b", 2], ["c", 2]])]
+        [false, new Map([["a", 1], ["d", 3]])],
+        [true, new Map([["b", 2], ["c", 2]])]
       ]);
 
       const groupBy_withSet = groupBy(mySet, (v) => { return v % 2 === 0 })
       const expectedWithSet = new Map([
-        ["false", new Set([1, 3, 5])],
-        ["true", new Set([2, 4])]
+        [false, new Set([1, 3, 5])],
+        [true, new Set([2, 4])]
       ]);
 
       const groupBy_withArr = groupBy(myArr, (v) => { return v % 2 === 0 })
@@ -130,6 +142,24 @@ describe("builtin data structure function tests", () => {
       expect(Object.fromEntries(groupBy_withMap)).toMatchObject(Object.fromEntries(expectedWithMap))
       expect(Object.fromEntries(groupBy_withSet)).toMatchObject(Object.fromEntries(expectedWithSet))
       expect(Object.fromEntries(groupBy_withArr)).toMatchObject(Object.fromEntries(expectedWithArr))
+    })
+
+    it("implementation: works with values in returned Map being falsy values", () => {
+      //* not possible because the values of the returned Map starts with an array/Set/Map with 1 element, which is truthy
+      //setup
+      const emptyArr = []
+      const myArr1 = [0]
+      //apply
+      const groupBy_withEmptyArr = groupBy(emptyArr, (v) => { return "key" })
+
+      const groupBy_withMyArr1 = groupBy(myArr1, (v) => { return "key" })
+      const expected_withMyArr1 = new Map([["key", [0]]])
+      // const expected = new Map([["key", new Map([[0, 0]])]])
+      //test
+      //NB: `toMatchObject` method always return true when test against an expected empty object!`
+      //    So in the first test we use the length of the object to verify that it is empty
+      expect(groupBy_withEmptyArr.size).toBe(0)
+      expect(Object.fromEntries(groupBy_withMyArr1)).toMatchObject(Object.fromEntries(expected_withMyArr1))
     })
   })
 })

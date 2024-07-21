@@ -18,7 +18,7 @@ import { enableMapSet, produce } from "immer";
  * ```
  * @last update: 19/07/2024; verified: 19/07/2024; tested: NO (simple enough)
  */
-const pipe = value => ({
+export const pipe = value => ({
   value,
   to: (fn, ...args) => pipe(fn(value, ...args))
 })
@@ -91,7 +91,7 @@ export function countBy(struct: Map<any, any> | Set<any> | Array<any>, fn: Funct
   let ret = new Map()
   struct.forEach((...args) => {
     let key = fn(...args);
-    !!ret.get(key) ? ret.set(key, ret.get(key) + 1) : ret.set(key, 1)
+    ret.get(key) !== undefined ? ret.set(key, ret.get(key) + 1) : ret.set(key, 1)
   })
   return ret
 }
@@ -114,13 +114,13 @@ export function groupBy(struct: Map<any, any> | Set<any> | Array<any>, fn: Funct
     if (struct instanceof Map) {
       //by default, the map arguments with forEach are (val, key)
       val = args.slice(0, 2).reverse() //we want the args in the "intuitive" order (key, val) 
-      !!ret.get(key) ? ret.get(key).set(val[0], val[1]) : ret.set(key, new Map([val]))
+      ret.get(key) !== undefined ? ret.get(key).set(val[0], val[1]) : ret.set(key, new Map([val]))
     } else if (struct instanceof Set) {
       val = args[0]
-      !!ret.get(key) ? ret.get(key).add(val) : ret.set(key, new Set([val]))
+      ret.get(key) !== undefined ? ret.get(key).add(val) : ret.set(key, new Set([val]))
     } else {
       val = args[0]
-      !!ret.get(key) ? ret.get(key).push(val) : ret.set(key, [val])
+      ret.get(key) !== undefined ? ret.get(key).push(val) : ret.set(key, [val])
     }
   })
   return ret
@@ -167,7 +167,9 @@ export function withArraySwap(Or_MapSetObj: Map<any, any> | Set<any>, f: Functio
  * let obj = {x:5}; let updatedObj = copyOnWrite(obj, draft => {draft.x = 1})
  * ```
  * @notes inside the fn body, the object is a draft object. 
- *   For debugging, transform the draft to objects, use `current(<draft>)` 
+ *   For debugging, transform the draft to objects, use `current(<draft>)`. 
+ *   It is possible to return a new data using `return` in the callback, but ONLY 
+ *   if you didn't modify the draft.
  * @param obj : can be any array or plain object, Map or Set.
  *   For object from user-defined classes, add `[immerable] = true` in the class definition
  * @param changeFn : you can use in the function any mutative method on the object, it will not modify it
