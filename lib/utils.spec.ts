@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, test } from '@jest/globals';
-import { countBy, cut, groupBy, justOnce } from './utils';
+import { countByWithMap, countByWithObj, cut, groupByWithMap, groupByWithObj, justOnce, toType } from './utils';
 
+//NOTES: use toStrictEqual to compare object values, not toMatchObject
+//toStrictEqual do not always check the types on the keys  of Map ( check groupByWithMap_onObj: not able to reproduce simply)? 
 
 describe("concurrency primitives function tests", () => {
   beforeEach(() => {
@@ -81,26 +83,46 @@ describe("builtin data structure function tests", () => {
     const mySet = new Set(myArr)
   });
 
-  describe("countBy()", () => {
+  describe("countByWithMap()", () => {
+    it("returns a Map instance", () => {
+      const returnStruct = countByWithMap([], () => { })
+      expect(toType(returnStruct)).toBe("[object Map]")
+
+    })
     it("counts the number of instances where the function returns the same value", () => {
       //setup
+      const myObj = { "a": 1, "b": 2, "c": 2, "d": 4 }
+      class myClass {
+        a: number; b: number; c: number; d: number;
+        constructor(a, b, c, d) { this.a = a; this.b = b; this.c = c; this.d = d }
+      }
+      const myCustomObj = new myClass(1, 2, 2, 4)
       const myMap = new Map()
-      myMap.set("a", 1).set("b", 2).set("c", 2).set("d", 3)
+      myMap.set("a", 1).set("b", 2).set("c", 2).set("d", 4)
       let myArr = [1, 2, 3, 4, 5]
       const mySet = new Set(myArr)
       //apply
-      const countBy_withMap = countBy(myMap, (v, k) => { return v % 2 === 0 })
-      const expectedWithMap = new Map([[false, 2], [true, 2]]);
+      const countByWithMap_onObj = countByWithMap(myObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onObj = new Map([[false, 1], [true, 3]]);
 
-      const countBy_withSet = countBy(mySet, (v) => { return v % 2 === 0 })
-      const expectedWithSet = new Map([[false, 3], [true, 2]]);
+      const countByWithMap_onCustomObj = countByWithMap(myCustomObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onCustomObj = new Map([[false, 1], [true, 3]])
 
-      const countBy_withArr = countBy(myArr, (v) => { return v % 2 === 0 })
-      const expectedWithArr = new Map([[false, 3], [true, 2]]);
+      const countByWithMap_onMap = countByWithMap(myMap, (v, k) => { return v % 2 === 0 })
+      const expected_onMap = new Map([[false, 1], [true, 3]]);
+
+      const countByWithMap_onSet = countByWithMap(mySet, (v) => { return v % 2 === 0 })
+      const expected_onSet = new Map([[false, 3], [true, 2]]);
+
+      const countByWithMap_onArr = countByWithMap(myArr, (v) => { return v % 2 === 0 })
+      const expected_onArr = new Map([[false, 3], [true, 2]]);
+
       //test
-      expect(Object.fromEntries(countBy_withMap)).toMatchObject(Object.fromEntries(expectedWithMap))
-      expect(Object.fromEntries(countBy_withSet)).toMatchObject(Object.fromEntries(expectedWithSet))
-      expect(Object.fromEntries(countBy_withArr)).toMatchObject(Object.fromEntries(expectedWithArr))
+      expect(countByWithMap_onObj).toStrictEqual(expected_onObj)
+      expect(countByWithMap_onCustomObj).toStrictEqual(expected_onCustomObj)
+      expect(countByWithMap_onMap).toStrictEqual(expected_onMap)
+      expect(countByWithMap_onSet).toStrictEqual(expected_onSet)
+      expect(countByWithMap_onArr).toStrictEqual(expected_onArr)
     })
 
     it("implementation: works with values in returned Map being falsy values", () => {
@@ -109,39 +131,105 @@ describe("builtin data structure function tests", () => {
       const myMap = new Map()
       myMap.set("a", "val")
       //apply
-      const countBy_result = countBy(myMap, (v, k) => { return "key" })
+      const countBy_result = countByWithMap(myMap, (v, k) => { return "key" })
       const expected = new Map([["key", 1]])
       //test
-      expect(Object.fromEntries(countBy_result)).toMatchObject(Object.fromEntries(expected))
+      expect(countBy_result).toStrictEqual(expected)
     })
   })
 
-  describe("groupBy()", () => {
+  describe("countByWithObject()", () => {
+    it("returns an literal object", () => {
+      const returnStruct = countByWithObj([], () => { })
+      expect(toType(returnStruct)).toBe("[object Object]")
+    })
+
+    it("counts the number of instances where the function returns the same value", () => {
+      //setup
+      const myObj = { "a": 1, "b": 2, "c": 2, "d": 4 }
+      class myClass {
+        a: number; b: number; c: number; d: number;
+        constructor(a, b, c, d) { this.a = a; this.b = b; this.c = c; this.d = d }
+      }
+      const myCustomObj = new myClass(1, 2, 2, 4)
+      const myMap = new Map()
+      myMap.set("a", 1).set("b", 2).set("c", 2).set("d", 4)
+      let myArr = [1, 2, 3, 4, 5]
+      const mySet = new Set(myArr)
+      //apply
+      const countByWithObj_onObj = countByWithObj(myObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onObj = { false: 1, true: 3 };
+
+      const countByWithObj_onCustomObj = countByWithObj(myCustomObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onCustomObj = { false: 1, true: 3 }
+
+      const countByWithObj_onMap = countByWithObj(myMap, (v, k) => { return v % 2 === 0 })
+      const expected_onMap = { false: 1, true: 3 };
+
+      const countByWithObj_onSet = countByWithObj(mySet, (v) => { return v % 2 === 0 })
+      const expected_onSet = { false: 3, true: 2 };
+
+      const countByWithObj_onArr = countByWithObj(myArr, (v) => { return v % 2 === 0 })
+      const expected_onArr = { false: 3, true: 2 };
+      //test
+      expect(countByWithObj_onObj).toStrictEqual(expected_onObj)
+      expect(countByWithObj_onCustomObj).toStrictEqual(expected_onCustomObj)
+      expect(countByWithObj_onMap).toStrictEqual(expected_onMap)
+      expect(countByWithObj_onSet).toStrictEqual(expected_onSet)
+      expect(countByWithObj_onArr).toStrictEqual(expected_onArr)
+    })
+  })
+
+  describe("groupByWithMap()", () => {
+    it("returns a Map instance", () => {
+      const returnStruct = countByWithMap([], () => { })
+      expect(toType(returnStruct)).toBe("[object Map]")
+
+    })
+
     it("group the number of instances where the function returns the same value", () => {
       //setup
+      const myObj = { "a": 1, "b": 2, "c": 2, "d": 3 }
+      class myClass {
+        a: number; b: number; c: number; d: number;
+        constructor(a, b, c, d) { this.a = a; this.b = b; this.c = c; this.d = d }
+      }
+      const myCustomObj = new myClass(1, 2, 2, 3)
       const myMap = new Map()
       myMap.set("a", 1).set("b", 2).set("c", 2).set("d", 3)
       let myArr = [1, 2, 3, 4, 5]
       const mySet = new Set(myArr)
       //apply
-      const groupBy_withMap = groupBy(myMap, (v, k) => { return v % 2 === 0 })
-      const expectedWithMap = new Map([
+      const groupByWithMap_onObj = groupByWithMap(myObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onObj = new Map([
+        [false, { a: 1, d: 3 }], [true, { b: 2, c: 2 }]
+      ])
+
+      const groupByWithMap_onCustomObj = groupByWithMap(myCustomObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onCustomObj = new Map<any, Object>([
+        [false, { a: 1, d: 3 }], [true, { b: 2, c: 2 }]
+      ])
+
+      const groupByWithMap_onMap = groupByWithMap(myMap, (v, k) => { return v % 2 === 0 })
+      const expected_onMap = new Map([
         [false, new Map([["a", 1], ["d", 3]])],
         [true, new Map([["b", 2], ["c", 2]])]
       ]);
 
-      const groupBy_withSet = groupBy(mySet, (v) => { return v % 2 === 0 })
-      const expectedWithSet = new Map([
+      const groupByWithMap_onSet = groupByWithMap(mySet, (v) => { return v % 2 === 0 })
+      const expected_onSet = new Map([
         [false, new Set([1, 3, 5])],
         [true, new Set([2, 4])]
       ]);
 
-      const groupBy_withArr = groupBy(myArr, (v) => { return v % 2 === 0 })
-      const expectedWithArr = new Map([[false, [1, 3, 5]], [true, [2, 4]]]);
+      const groupByWithMap_onArr = groupByWithMap(myArr, (v) => { return v % 2 === 0 })
+      const expected_onArr = new Map([[false, [1, 3, 5]], [true, [2, 4]]]);
       //test
-      expect(Object.fromEntries(groupBy_withMap)).toMatchObject(Object.fromEntries(expectedWithMap))
-      expect(Object.fromEntries(groupBy_withSet)).toMatchObject(Object.fromEntries(expectedWithSet))
-      expect(Object.fromEntries(groupBy_withArr)).toMatchObject(Object.fromEntries(expectedWithArr))
+      expect(groupByWithMap_onObj).toStrictEqual(expected_onObj)
+      expect(groupByWithMap_onCustomObj).toStrictEqual(expected_onCustomObj)
+      expect(groupByWithMap_onMap).toStrictEqual(expected_onMap)
+      expect(groupByWithMap_onSet).toStrictEqual(expected_onSet)
+      expect(groupByWithMap_onArr).toStrictEqual(expected_onArr)
     })
 
     it("implementation: works with values in returned Map being falsy values", () => {
@@ -150,16 +238,65 @@ describe("builtin data structure function tests", () => {
       const emptyArr = []
       const myArr1 = [0]
       //apply
-      const groupBy_withEmptyArr = groupBy(emptyArr, (v) => { return "key" })
+      const groupBy_withEmptyArr = groupByWithMap(emptyArr, (v) => { return "key" })
 
-      const groupBy_withMyArr1 = groupBy(myArr1, (v) => { return "key" })
+      const groupBy_withMyArr1 = groupByWithMap(myArr1, (v) => { return "key" })
       const expected_withMyArr1 = new Map([["key", [0]]])
-      // const expected = new Map([["key", new Map([[0, 0]])]])
       //test
-      //NB: `toMatchObject` method always return true when test against an expected empty object!`
-      //    So in the first test we use the length of the object to verify that it is empty
       expect(groupBy_withEmptyArr.size).toBe(0)
-      expect(Object.fromEntries(groupBy_withMyArr1)).toMatchObject(Object.fromEntries(expected_withMyArr1))
+      expect(groupBy_withMyArr1).toStrictEqual(expected_withMyArr1)
     })
+  })
+
+  describe("groupByWithObject()", () => {
+    it("returns an literal object", () => {
+      const returnStruct = groupByWithObj([], () => { })
+      expect(toType(returnStruct)).toBe("[object Object]")
+    })
+
+    it("group the number of instances where the function returns the same value", () => {
+      //setup
+      const myObj = { "a": 1, "b": 2, "c": 2, "d": 3 }
+      class myClass {
+        a: number; b: number; c: number; d: number;
+        constructor(a, b, c, d) { this.a = a; this.b = b; this.c = c; this.d = d }
+      }
+      const myCustomObj = new myClass(1, 2, 2, 3)
+      const myMap = new Map()
+      myMap.set("a", 1).set("b", 2).set("c", 2).set("d", 3)
+      let myArr = [1, 2, 3, 4, 5]
+      const mySet = new Set(myArr)
+      //apply
+      const groupByWithObj_onObj = groupByWithObj(myObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onObj = { false: { a: 1, d: 3 }, true: { b: 2, c: 2 } }
+
+      const groupByWithObj_onCustomObj = groupByWithObj(myCustomObj, ([k, v]) => { return v % 2 === 0 })
+      const expected_onCustomObj = { false: { a: 1, d: 3 }, true: { b: 2, c: 2 } }
+
+      const groupByWithObj_onMap = groupByWithObj(myMap, (v, k) => { return v % 2 === 0 })
+      const expected_onMap = {
+        false: new Map([["a", 1], ["d", 3]]),
+        true: new Map([["b", 2], ["c", 2]])
+      };
+
+      const groupByWithObj_onSet = groupByWithObj(mySet, (v) => { return v % 2 === 0 })
+      const expected_onSet = {
+        false: new Set([1, 3, 5]),
+        true: new Set([2, 4])
+      }
+
+      const groupByWithObj_onArr = groupByWithObj(myArr, (v) => { return v % 2 === 0 })
+      const expected_onArr = {
+        false: [1, 3, 5], true: [2, 4]
+      }
+
+      //test
+      expect(groupByWithObj_onObj).toStrictEqual(expected_onObj)
+      expect(groupByWithObj_onCustomObj).toStrictEqual(expected_onCustomObj)
+      expect(groupByWithObj_onMap).toStrictEqual(expected_onMap)
+      expect(groupByWithObj_onSet).toStrictEqual(expected_onSet)
+      expect(groupByWithObj_onArr).toStrictEqual(expected_onArr)
+    })
+
   })
 })
