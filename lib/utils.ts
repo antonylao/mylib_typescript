@@ -1,5 +1,6 @@
 import { addHour, addMinute, addSecond, format, parse } from "@formkit/tempo";
-import { current, Draft, enableMapSet, produce, setAutoFreeze } from "immer";
+import { castDraft, current, Draft, enableMapSet, produce, setAutoFreeze } from "immer";
+
 //-----------------------------------------
 // FUNCTIONAL PARADIGM FUNCTIONS
 //-------------------------------------------
@@ -25,7 +26,7 @@ export const pipe = value => ({
 })
 
 //------------------------------
-// CONCURRENCY PRIMITIVES (MODIFY THE ORDERING AND REPETITION OF FUNCTION CALLS) 
+// CONCURRENCY PRIMITIVES (MODIFY THE ORDERING (for async) AND REPETITION OF FUNCTION CALLS) 
 //--------------------------------
 
 /**
@@ -79,6 +80,11 @@ export function cut(limit: number, callback: Function) {
 export const range = (start: number, stop: number, step: number = 1): number[] =>
   Array.from({ length: (stop - start) / step + 1 }, (_, i) => start + i * step);
 
+/**
+ * @author Antony Lao
+ * @param obj 
+ * @returns 
+ */
 export function toType(obj: any) {
   return Object.prototype.toString.call(obj).toString()
 }
@@ -96,13 +102,44 @@ export function isObject(obj: any) {
 }
 
 //we initialize reduce with `null` in the case of empty array: no error and returns null
-const min = function (arr: Array<any>, pluck: Function = (x) => x) {
+export const min = function (arr: Array<any>, pluck: Function = (x) => x) {
   return arr.reduce((min, x) => min && pluck(min) < pluck(x) ? min : x, null)
 }
 
-const max = function (arr: Array<any>, pluck: Function = (x) => x) {
+export const max = function (arr: Array<any>, pluck: Function = (x) => x) {
   return arr.reduce((max, x) => max && pluck(max) > pluck(x) ? max : x, null)
 }
+
+//CONVERTING MAP/SET TO/FROM OBJ/ARRR
+export function arrToSet<T>(arr: Array<T>) {
+  return new Set(arr)
+}
+
+export function setToArr<T>(setStruct: Set<T>) {
+  return Array.from(setStruct)
+}
+
+export function mapToObj<T, K>(mapStruct: Map<T, K>): { string: K } {
+  return Object.fromEntries(mapStruct)
+}
+
+/**
+ * 
+ * @param obj : NOT TYPECHECKED!
+ * @returns 
+ */
+export function objToMap(obj: Object) {
+  return new Map(Object.entries(obj));
+}
+
+// interface Test {
+//   "a": number
+// }
+// let obj: Test = { a: 45 }
+// let mySet = new Set([1, 2, 3])
+// let vanillaReturned = new Map(Object.entries(obj))
+// let returned = mapToObj(new Map<number | string, number | string>([[1, 3], ["b", 2]]))
+
 
 /**
  * @author Antony Lao
@@ -149,13 +186,14 @@ export function countByWithObj(struct: any, fn: Function) {
  * @description returns a new Map. The return value of `fn` becomes a key in the Map, and 
  *   the value is the grouping of the struct values for which applying the function returns the same thing.
  *   The grouping are of the same type as the struct
+ * @warning: fn and fnOnEltsGrouped can mutate stuff, in particular the struct passed!
  * @note available for array, map, set, object (literal or custom), but NO TYPECHECKING on struct 
  * @note on custom objects, the groupings values are literal objects
  * @ex ``` groupBy(myMap, (v,k) => {return v % 2 === 0})```
- * @last update: 22/07/2024; verified: 22/07/2024; tested: YES
+ * @last update: 25/07/2024; verified: 25/07/2024; tested: YES
  * 
  */
-export function groupByWithMap(struct: any, fn: Function) {
+export function groupByWithMap(struct: any, fn: Function, fnOnEltsGrouped: Function = (x) => x) {
   let ret = new Map()
 
   let newStruct;
@@ -171,20 +209,26 @@ export function groupByWithMap(struct: any, fn: Function) {
     //we check against the type of the original struct, not newStruct
     if (isObject(struct)) {
       val = args[0]
-      const [structKey, structVal] = [val[0], val[1]]
+      const finalVal = fnOnEltsGrouped(val)
+      const [structKey, structVal] = [finalVal[0], finalVal[1]]
+      //original: const [structKey, structVal] = [val[0], val[1]]
       ret.get(retKey) !== undefined ? ret.get(retKey)[structKey] = structVal : ret.set(retKey, { [structKey]: structVal })
     } else if (struct instanceof Map) {
       //by default, the map arguments with forEach are (val, key)
       val = args.slice(0, 2).reverse() //we want the args in the "intuitive" order (key, val) 
-      const [structKey, structVal] = [val[0], val[1]]
+      const finalVal = fnOnEltsGrouped(val) //the function applies to a tuple [k, v], like for literal objects
+      const [structKey, structVal] = [finalVal[0], finalVal[1]]
+      //original const [structKey, structVal] = [val[0], val[1]]
       ret.get(retKey) !== undefined ? ret.get(retKey).set(structKey, structVal) : ret.set(retKey, new Map([[structKey, structVal]]))
 
     } else if (struct instanceof Set) {
       val = args[0]
-      ret.get(retKey) !== undefined ? ret.get(retKey).add(val) : ret.set(retKey, new Set([val]))
+      const finalVal = fnOnEltsGrouped(val)
+      ret.get(retKey) !== undefined ? ret.get(retKey).add(finalVal) : ret.set(retKey, new Set([finalVal]))
     } else if (struct instanceof Array) {
       val = args[0]
-      ret.get(retKey) !== undefined ? ret.get(retKey).push(val) : ret.set(retKey, [val])
+      const finalVal = fnOnEltsGrouped(val)
+      ret.get(retKey) !== undefined ? ret.get(retKey).push(finalVal) : ret.set(retKey, [finalVal])
     }
   })
   return ret
@@ -194,14 +238,16 @@ export function groupByWithMap(struct: any, fn: Function) {
  * @author Antony Lao
  * @description returns a new literal object. The return value of `fn` becomes a key in the object, and 
  *   the value is the grouping of the struct values for which applying the function returns the same thing.
+ *   Another optional function can be used to change the elts grouped
  *   The grouping are of the same type as the struct
+ * @warning: fn and fnOnEltsGrouped can mutate stuff, in particular the struct passed!
  * @note available for array, map, set, object (literal or custom), but NO TYPECHECKING on struct 
  * @note on custom objects, the groupings values are literal objects
  * @ex ``` groupBy(myMap, (v,k) => {return v % 2 === 0})```
- * @last update: 22/07/2024; verified: 22/07/2024; tested: YES
+ * @last update: 25/07/2024; verified: 25/07/2024; tested: YES
  * 
  */
-export function groupByWithObj(struct: any, fn: Function) {
+export function groupByWithObj(struct: any, fn: Function, fnOnEltsGrouped: Function = (x) => x) {
   const ret: Record<any, any> = {}
 
   let newStruct;
@@ -217,79 +263,193 @@ export function groupByWithObj(struct: any, fn: Function) {
     //we check against the type of the original struct, not newStruct
     if (isObject(struct)) {
       val = args[0];
-      const [structKey, structVal] = [val[0], val[1]]
+      const finalVal = fnOnEltsGrouped(val)
+      const [structKey, structVal] = [finalVal[0], finalVal[1]]
       ret[retKey] !== undefined ? ret[retKey][structKey] = structVal : ret[retKey] = { [structKey]: structVal }
     } else if (struct instanceof Map) {
       //by default, the map arguments with forEach are (val, key)
       val = args.slice(0, 2).reverse() //we want the args in the "intuitive" order (key, val) 
-      const [structKey, structVal] = [val[0], val[1]]
+      const finalVal = fnOnEltsGrouped(val) //the function applies to a tuple [k, v], like for literal objects
+      const [structKey, structVal] = [finalVal[0], finalVal[1]]
       ret[retKey] !== undefined ? ret[retKey].set(structKey, structVal) : ret[retKey] = new Map([[structKey, structVal]])
     } else if (struct instanceof Set) {
       val = args[0]
-      ret[retKey] !== undefined ? ret[retKey].add(val) : ret[retKey] = new Set([val])
+      const finalVal = fnOnEltsGrouped(val)
+      ret[retKey] !== undefined ? ret[retKey].add(finalVal) : ret[retKey] = new Set([finalVal])
     } else if (struct instanceof Array) {
       val = args[0]
-      ret[retKey] !== undefined ? ret[retKey].push(val) : ret[retKey] = [val]
+      const finalVal = fnOnEltsGrouped(val)
+      // console.log("🚀 ~ newStruct.forEach ~ val:", val)
+
+      ret[retKey] !== undefined ? ret[retKey].push(finalVal) : ret[retKey] = [finalVal]
     }
   })
   return ret
 }
 
+/**
+ * @description: creates an object from two arrays: an array of keys, and an array of values.
+ *   Takes the array of keys to iterate, so if the `values` array is shorter, undefined are the default 
+ *   for the remaining keys
+ * @last updated: 25/07/2024; verified: 25/07/2024
+ */
+export function createObjFrom(keys, values) {
+  return keys.reduce((obj, key, idx) => {
+    obj[key] = values[idx]
+    return obj
+  }, {})
+}
 
+// const myObj = { key: 'a', aName: 'b', price: undefined, quantity: undefined }
+// const newObj = extractKeyFromObj(myObj)
+// console.log("🚀 ~ newObj:", newObj)
+
+/**
+ * @description creates an object from an array of objects having each a `key` key
+ * @note somewhat specialized function. Maybe later add functionnality with Map and Set? 
+ * @param arr : array of objects, each with a `key` key
+ * @uses copyOnWrite(I.e immer)
+ */
+export function extractKeysFrom(arr: Array<{ key: any }>) {
+  return groupByWithObj(arr, (v) => v.key,
+    (v) => { return copyOnWrite(v, v => { delete v.key }) })
+}
 /**
  * @author Antony Lao
  * @description convert a struct (Map/Set/obj) to array, apply f to the the array, then convert it back to original struct.
  *   permits to leverage Array methods on the struct 
- * @note: doesn't work on built-in objects
+ * @note: doesn't work on literal objects. not mutative
+ * @note if struct is not a Map, a Set or an object (literal or custom), RETURN THE ORIGINAL struct 
  * @ex 
  * ```
- * withArraySwap(myMap, (arr) => {<perform operations an array>})
+ * withArraySwap(myMap, (arr) => {return <perform operations on array>})
  * ```
- * @param Or_MapSetObj
+ * @param struct
  * @param f : function with the array from struct as a parameter 
  * @returns new struct
- * @last update: 20/07/2024; verified: 20/07/2024; tested: NO (simple enough)
+ * @last update: 20/07/2024; verified: 20/07/2024; tested: NO (TODO)
  */
-export function withArraySwap(Or_MapSetObj: Map<any, any> | Set<any>, f: Function) {
-  let arrFromStruct = Array.from(Or_MapSetObj)
+export function withArraySwap(struct: Map<unknown, unknown> | Set<unknown> | Record<string | symbol, any>, f: Function) {
+  let arrFromStruct;
+  if (isObject(struct)) {
+    arrFromStruct = Object.entries(struct)
+  } else if (struct instanceof Map || struct instanceof Set) {
+    arrFromStruct = Array.from(struct)
+  } else {
+    return struct
+  }
 
   let arrTransformed = f(arrFromStruct)
 
-  if (Or_MapSetObj instanceof Set) {
+  if (struct instanceof Set) {
     return new Set(arrTransformed)
-  } else if (Or_MapSetObj instanceof Map) {
+  } else if (struct instanceof Map) {
     return new Map(arrTransformed)
+  } else if (isObject(struct)) {
+    return Object.fromEntries(arrTransformed)
   }
 }
 
+//MANUAL TESTS
+// const myMap = new Map([['a', 1], ["b", 2]])
+// const newMap = withArraySwap(myMap, (arr) => {
+//   return arr.filter(([k, v]) => { return v % 2 === 0 })
+// })
+// // console.log("🚀 ~ newMap ~ newMap:", newMap)
 
+// const myObj = { "a": 1, "b": 2 }
+// const newObj = withArraySwap(myObj, (arr) => {
+//   return arr.filter(([k, v]) => { return v % 2 === 0 })
+// })
+// console.log("🚀 ~ newObj ~ newObj:", newObj)
 /**
+ * @author Antony Lao
  * source: https://ebeced.com/blog/ts-best-practices/using-map#utils-javalike-putifabsent
  * modified implementation: doesn't work with keys of map not being a primitive types
+ * not mutative
  */
-export function putIfAbsent<T>(map: Map<T, string>, newMember: T, value: string) {
-  const isUniqueKey = Array.from(map.keys()).find(existingMember => {
-    return existingMember === newMember
+//TODO add a elseFn param to define what to do if the key is present
+export function addToMapIfKeyAbsent<T, K>(mapStruct: Map<T, K>, newKey: T, value: K) {
+
+  const keyExists = Array.from(mapStruct.keys()).find(existingKey => {
+    return existingKey === newKey
   })
 
-  if (!isUniqueKey) {
-    map.set(newMember, value)
+  //<arr>.find() returns undefined if there is no match
+  if (keyExists === undefined) {
+    return copyOnWrite(mapStruct, draft => {
+      draft.set(castDraft(newKey), castDraft(value)) //castDraft is a immer function, used to make the Draft type error disappear
+
+    })
   }
+
+  return mapStruct
 }
 
-//TODO: putIfAbsent for object ? maybe easy enough?
+//MANUAL TESTS
+// const myMap = new Map([["a", 1]])
+// const myMapModif = addIfKeyAbsent(myMap, "b", 2)
+// console.log("🚀 ~ myMap:", myMap)
+// console.log("🚀 ~ myMapModif:", myMapModif)
 
 
-//TODO: getKeysFromValue for Map (& Arr)
+/**
+ * @author Antony Lao
+ * @description: use with literal object
+ * @note use copy-on-write: not mutative
+ * @Warning: obj NOT TYPECHECKED
+ */
+//TODO add a elseFn param to define what to do if the key is present
+export function addToObjIfKeyAbsent<T>(obj: T, newKey: string | symbol, value: any) {
+  const keyExists = pipe(obj)
+    .to(Object.keys).value
+    .find(existingKey => {
+      return existingKey === newKey
+    })
+
+  //<arr>.find() returns undefined if there is no match
+  if (keyExists === undefined) {
+    return copyOnWrite(obj, draft => {
+      draft[newKey] = value
+    })
+  }
+  return obj
+}
+
+//MANUAL TESTS
+// type myObjType = {
+//   "a": number
+// }
+// const myObj: myObjType = { "a": 1 }
+// const myObj2 = addToObjIfKeyAbsent(myObj, "b", "b")
+// console.log("🚀 ~ myObj2:", myObj2)
+
+// export function getIdxFromValue(arr: Array<any>, value) {
+//   let keysArr = range(0, arr.length - 1)
+//     .filter((idx) => { return arr[idx] === value })
+
+//   return new Set(keysArr)
+// }
+
 /**
  * @author: Antony Lao
- * @param obj : literal object (NOT TYPECHECKED)
+ * @param obj_like : Map or literal object (NOT TYPECHECKED)
  * @param value : value to find the keys from
- * @returns list of keys
+ * @returns Set of keys
  */
-export function getObjKeysFromValue(obj, value) {
-  return Object.keys(obj).filter(key => obj[key] === value);
+export function getKeysFromValue(obj_like, value) {
+  let keysArr;
+  if (isObject(obj_like)) {
+    keysArr = Object.keys(obj_like).filter(key => obj_like[key] === value);
+  }
+  if (obj_like instanceof Map) {
+    keysArr = pipe(obj_like.keys())
+      .to(Array.from).value
+      .filter(key => obj_like.get(key) === value);
+  }
+  return new Set(keysArr)
 }
+
 //-----------------------------------------
 // HELPERS FOR IMMUTABLES (WITH IMMER)
 //------------------------------------------
@@ -319,7 +479,66 @@ export function copyOnWrite<T>(obj: T, changeFn: (draft: Draft<T>) => Draft<T> |
   return produce(obj, changeFn);
 }
 
+class ExperimentalCopyOnWrite {
+  //experimental
+  /**
+   * @description
+   * @param obj : a literal object or an array
+   * @param keys array of keys
+   * @param changeFn : function which takes a shallow copy of obj and mutates it
+   *   
+   */
+  static handmadeCopyOnWrite(obj: any, changeFn: Function) {
+    function shallowCopy(obj) {
+      let copy;
+      if (isObject(obj)) {
+        return Object.assign({}, obj)
+      }
+      if (obj instanceof Array) {
+        return obj.slice()
+      }
+    }
 
+    let copy = shallowCopy(obj)
+    changeFn(copy)
+    return copy
+  }
+
+  /**
+   * @description
+   * @param obj : a literal object or an array
+   * @param key 
+   * @param changeFnOnKey : function should return the new value of obj[key] WITHOUT multating it
+   * @uses handmadeCopyOnWrite
+   */
+  static modifyKey(obj: any, key: any, changeFnOnKey: any) {
+    return this.handmadeCopyOnWrite(obj, (obj) => obj[key] = changeFnOnKey(obj[key]))
+  }
+  /**
+   * @description
+   * @param obj : a literal object or an array
+   * @param keys: array of keys: order is from less to most nested keys 
+   * @param changeFnOnKey : function should return the new value of obj[key] WITHOUT multating it
+   * @uses handmadeCopyOnWrite, modifyKey
+   */
+  static modifyNestedKey(obj: any, keys: Array<any>, changeFnOnKey: any) {
+    if (keys.length === 0) {
+      return changeFnOnKey(obj)
+    }
+    let first_key = keys[0]
+    let remaining_keys = keys.slice(1)
+    return this.modifyKey(obj, first_key, (x) => {
+      return this.modifyNestedKey(x, remaining_keys, changeFnOnKey)
+    })
+  }
+
+}
+// const nested_obj = { "nested": "object" }
+// const obj = { "a": nested_obj, "b": 2 }
+
+// const objModified = ExperimentalCopyOnWrite.modifyNestedKey(obj, ["a", "nested"], (x) => "modified")
+// p(obj)
+// p(objModified)
 //-----------------------------------------
 // MATH HELPERS
 //------------------------------------------
@@ -335,18 +554,20 @@ type meanParams = {
   rounded?: boolean
   nbOfFloatDigits?: number;
 }
+const sum = (arr) => {
+  return arr.reduce((acc: number, currentValue: number) => {
+    return acc + currentValue
+  })
+}
 
 export const mean = ({ arr, rounded = true, nbOfFloatDigits = 2 }: meanParams) => {
   if (arr.length === 0) {
     return 0;
   }
 
-  const sum = arr.reduce((acc: number, currentValue: number) => {
-    return acc + currentValue
-  })
 
   //this does floating point division because JS doesn't have separation between int/float
-  let meanNum = sum / arr.length
+  let meanNum = sum(arr) / arr.length
   if (rounded) {
     return round({ num: meanNum, nbOfFloatDigits })
   } else {
@@ -366,12 +587,11 @@ export function round({ num, nbOfFloatDigits = 2 }: roundParams) {
 // STRING HELPERS
 //------------------------------------------
 
-//helper for stringToRegExp: don't export
-function escapeRegExp(str: string) {
-  return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-}
-
 export function stringToRegExp(str: string) {
+  function escapeRegExp(str: string) {
+    return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  }
+
   str = escapeRegExp(str);
   return new RegExp(str, 'ig');
 }
@@ -410,7 +630,17 @@ export function addToDate(date: Date, duration: string) {
 }
 
 // format strDatetime: "2024-03-20T17:02:32.000Z"
-export function getDateAndTime(strDatetime: string): { date: string, time: string } {
+export function getDateAndTimeStruct(strDatetime: string): { date: string, time: string } {
   const dateTimeSplit = strDatetime.split(/[T.]/)
   return { date: dateTimeSplit[0], time: dateTimeSplit[1] }
+}
+
+//-----------------------------------------
+// DEBUG TOOLS
+//------------------------------------------
+
+export function p(obj, prefix = "print", suffix = "endPrint", depth = 99) {
+  console.log("🔔🚀 ~ " + prefix)
+  console.dir(obj, { depth })
+  // console.log("🚀🔔 ~ " + suffix)
 }
